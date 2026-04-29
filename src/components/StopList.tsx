@@ -31,7 +31,6 @@ export default function StopList({ stops, onChange, apiKey, showTimeWindows = fa
 
   const geocode = async (stop: Stop) => {
     if (!stop.address.trim() || stop.geocoding === 'done') return
-    if (!apiKey) { alert('Enter your ORS API key in the header first.'); return }
     update(stop.id, { geocoding: 'loading' })
     try {
       const coordinate = await geocodeAddress(stop.address, apiKey)

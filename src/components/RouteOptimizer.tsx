@@ -21,7 +21,6 @@ export default function RouteOptimizer({ apiKey }: Props) {
   const readyStops = stops.filter(s => s.geocoding === 'done' && s.coordinate)
 
   const handleOptimize = async () => {
-    if (!apiKey) { setError('Enter your ORS API key in the header.'); return }
     if (readyStops.length < 2) { setError('Add at least 2 geocoded addresses.'); return }
     setLoading(true)
     setError(null)
