@@ -29,7 +29,13 @@ function orsToLeaflet(coords: [number, number][]): [number, number][] {
 }
 
 export async function geocodeAddress(address: string, apiKey = ''): Promise<Coordinate> {
-  const params = new URLSearchParams({ text: address, size: '1' })
+  const params = new URLSearchParams({
+    text: address,
+    size: '1',
+    'focus.point.lat': '38.97',
+    'focus.point.lon': '-77.03',
+    'boundary.country': 'USA',
+  })
   if (apiKey) params.set('api_key', apiKey)
   const url = `${endpoint('geocode/search', apiKey)}?${params.toString()}`
   const res = await fetch(url)

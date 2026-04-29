@@ -42,7 +42,13 @@ export default function AddressInput({
       setFetching(true)
       try {
         const base = apiKey ? 'https://api.openrouteservice.org' : '/api/ors'
-        const params = new URLSearchParams({ text, size: '6' })
+        const params = new URLSearchParams({
+          text,
+          size: '6',
+          'focus.point.lat': '38.97',
+          'focus.point.lon': '-77.03',
+          'boundary.country': 'USA',
+        })
         if (apiKey) params.set('api_key', apiKey)
         const url = `${base}/geocode/autocomplete?${params.toString()}`
         const res = await fetch(url)
