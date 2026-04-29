@@ -4,8 +4,9 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'ORS_API_KEY environment variable is not set on this server.' })
   }
 
+  // Client calls /api/ors/<ors-path>, so path[0] = 'ors' — strip it
   const pathParts = Array.isArray(req.query.path) ? req.query.path : [req.query.path ?? '']
-  const orsPath = pathParts.join('/')
+  const orsPath = pathParts.slice(1).join('/')
   const isGeocode = orsPath.startsWith('geocode')
 
   const params = new URLSearchParams()
