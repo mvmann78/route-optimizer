@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Leaflet permanent tooltip: used for numbered stop markers */
+.leaflet-tooltip-permanent {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-weight: 700;
+  font-size: 11px;
+  color: white;
+  padding: 0;
+}
