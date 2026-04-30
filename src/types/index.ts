@@ -12,6 +12,7 @@ export interface Stop {
     earliest: string // "HH:MM"
     latest: string   // "HH:MM"
   }
+  pinnedPosition?: number // 1-indexed position in optimized route (1 = start); set by user
 }
 
 export type OptimizationMode = 'time' | 'distance' | 'left-turns'

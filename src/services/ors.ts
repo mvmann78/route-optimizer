@@ -1,5 +1,5 @@
 import type { Coordinate, Stop, RouteOptions, RouteResult, RouteStep } from '../types'
-import { solveTSP } from './tsp'
+import { solveTSP, solveTSPWithPins } from './tsp'
 
 const ORS_DIRECT = 'https://api.openrouteservice.org'
 const ORS_PROXY  = '/api/ors'
@@ -133,6 +133,29 @@ async function getDirections(
   }))
 }
 
+// Fetch directions for a manually specified stop order (used after drag-reorder).
+export async function getRouteForOrder(
+  orderedStops: Stop[],
+  options: Pick<RouteOptions, 'avoidHighways' | 'avoidTolls' | 'returnToStart'>,
+  apiKey: string
+): Promise<Omit<RouteResult, 'orderedStops'>> {
+  const coords = orderedStops.map(s => s.coordinate!)
+  const allCoords = [
+    ...coords,
+    ...(options.returnToStart ? [coords[0]] : []),
+  ]
+  const routes = await getDirections(allCoords, options, apiKey, false)
+  const route = routes[0]
+  const leftTurnCount = route.steps.filter(s => LEFT_TURN_TYPES.has(s.type)).length
+  return {
+    steps: route.steps,
+    totalDistance: route.distance,
+    totalDuration: route.duration,
+    leftTurnCount,
+    geometry: route.geometry,
+  }
+}
+
 async function optimizeWithVroom(
   stops: Stop[],
   options: RouteOptions,
@@ -215,6 +238,31 @@ async function optimizeWithVroom(
   }
 }
 
+// Build pinnedSlots from stops for use with the constrained TSP.
+// Returns null and an error string if there are conflicting pins.
+function buildPinnedSlots(
+  stops: Stop[],
+  fixedEnd: boolean
+): { slots: Map<number, number>; error: string | null } {
+  const n = stops.length
+  const maxPos = fixedEnd ? n - 1 : n // user positions 2..maxPos are valid
+  const slots = new Map<number, number>()
+
+  for (let i = 1; i < n; i++) {
+    const p = stops[i].pinnedPosition
+    if (p == null) continue
+    if (p < 2 || p > maxPos) {
+      return { slots, error: `Pin position ${p} is out of range (2–${maxPos}).` }
+    }
+    const routeIdx = p - 1 // 0-based
+    if (slots.has(routeIdx)) {
+      return { slots, error: `Two stops are pinned to the same position (${p}).` }
+    }
+    slots.set(routeIdx, i)
+  }
+  return { slots, error: null }
+}
+
 export async function optimizeRoute(
   stops: Stop[],
   options: RouteOptions,
@@ -222,6 +270,33 @@ export async function optimizeRoute(
 ): Promise<RouteResult> {
   const coords = stops.map(s => s.coordinate!)
   const hasTimeWindows = stops.some(s => s.timeWindow)
+  const hasPins = stops.some(s => s.pinnedPosition != null)
+
+  // When pins are set, use constrained TSP (ignores Vroom/time-window optimization)
+  if (hasPins) {
+    const { slots, error } = buildPinnedSlots(stops, options.fixedEnd && !options.returnToStart)
+    if (error) throw new Error(error)
+
+    const metric = options.mode === 'distance' ? 'distance' : 'duration'
+    const matrix = await getMatrix(coords, apiKey, metric)
+    const order = solveTSPWithPins(matrix, options.returnToStart, options.fixedEnd && !options.returnToStart, slots)
+    const orderedStops = order.map(i => stops[i])
+    const orderedCoords = [
+      ...order.map(i => coords[i]),
+      ...(options.returnToStart ? [coords[order[0]]] : []),
+    ]
+    const routes = await getDirections(orderedCoords, options, apiKey, false)
+    const route = routes[0]
+    const leftTurnCount = route.steps.filter(s => LEFT_TURN_TYPES.has(s.type)).length
+    return {
+      orderedStops,
+      steps: route.steps,
+      totalDistance: route.distance,
+      totalDuration: route.duration,
+      leftTurnCount,
+      geometry: route.geometry,
+    }
+  }
 
   // Delegate to Vroom when time windows are present (except left-turns mode)
   if (hasTimeWindows && options.mode !== 'left-turns') {

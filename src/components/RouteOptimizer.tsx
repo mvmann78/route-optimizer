@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Stop, OptimizationMode, RouteResult } from '../types'
-import { optimizeRoute } from '../services/ors'
+import { optimizeRoute, getRouteForOrder } from '../services/ors'
 import StopList from './StopList'
 import MapView from './MapView'
 import RouteResults from './RouteResults'
@@ -17,14 +17,18 @@ export default function RouteOptimizer({ apiKey }: Props) {
   const [result, setResult] = useState<RouteResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isManuallyOrdered, setIsManuallyOrdered] = useState(false)
 
   const readyStops = stops.filter(s => s.geocoding === 'done' && s.coordinate)
+  const hasTimeWindows = stops.some(s => s.timeWindow)
+  const hasPins = readyStops.some(s => s.pinnedPosition != null)
 
   const handleOptimize = async () => {
     if (readyStops.length < 2) { setError('Add at least 2 geocoded addresses.'); return }
     setLoading(true)
     setError(null)
     setResult(null)
+    setIsManuallyOrdered(false)
     try {
       const res = await optimizeRoute(readyStops, { mode, avoidHighways, avoidTolls, returnToStart, fixedEnd }, apiKey)
       setResult(res)
@@ -35,7 +39,18 @@ export default function RouteOptimizer({ apiKey }: Props) {
     }
   }
 
-  const hasTimeWindows = stops.some(s => s.timeWindow)
+  const handleReorder = async (newOrderedStops: Stop[]) => {
+    if (!result) return
+    // Optimistically update stop order so UI feels instant
+    setResult(prev => prev ? { ...prev, orderedStops: newOrderedStops } : null)
+    setIsManuallyOrdered(true)
+    try {
+      const update = await getRouteForOrder(newOrderedStops, { avoidHighways, avoidTolls, returnToStart }, apiKey)
+      setResult(prev => prev ? { ...prev, ...update } : null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to compute route for new order.')
+    }
+  }
 
   const openInGoogleMaps = () => {
     if (!result) return
@@ -96,6 +111,11 @@ export default function RouteOptimizer({ apiKey }: Props) {
                 ⚠ Time windows are ignored in left-turns mode.
               </p>
             )}
+            {hasPins && hasTimeWindows && (
+              <p className="text-xs text-amber-600 bg-amber-50 rounded p-2 mt-1">
+                ⚠ Pinned positions take priority — time windows will not be optimally honored.
+              </p>
+            )}
           </section>
 
           <section>
@@ -142,13 +162,25 @@ export default function RouteOptimizer({ apiKey }: Props) {
             </div>
           </section>
 
-          <button
-            onClick={() => void handleOptimize()}
-            disabled={loading || readyStops.length < 2}
-            className="w-full py-2.5 bg-blue-500 text-white rounded-lg font-medium text-sm hover:bg-blue-600 active:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {loading ? 'Optimizing…' : `Optimize ${readyStops.length > 0 ? `${readyStops.length} Stops` : 'Route'}`}
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => void handleOptimize()}
+              disabled={loading || readyStops.length < 2}
+              className="w-full py-2.5 bg-blue-500 text-white rounded-lg font-medium text-sm hover:bg-blue-600 active:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Optimizing…' : `Optimize ${readyStops.length > 0 ? `${readyStops.length} Stops` : 'Route'}`}
+            </button>
+
+            {isManuallyOrdered && result && (
+              <button
+                onClick={() => void handleOptimize()}
+                disabled={loading}
+                className="w-full py-2 bg-white border border-blue-300 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                Re-optimize route
+              </button>
+            )}
+          </div>
 
           {error && (
             <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -168,7 +200,12 @@ export default function RouteOptimizer({ apiKey }: Props) {
               </svg>
               Open in Google Maps
             </button>
-            <RouteResults result={result} />
+            <RouteResults
+              result={result}
+              fixedEnd={fixedEnd}
+              isManuallyOrdered={isManuallyOrdered}
+              onReorder={handleReorder}
+            />
           </div>
         )}
       </div>

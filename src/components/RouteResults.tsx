@@ -1,4 +1,5 @@
-import type { RouteResult } from '../types'
+import { useState } from 'react'
+import type { RouteResult, Stop } from '../types'
 
 const LEFT_TURN_TYPES = new Set([0, 2, 4])
 
@@ -13,12 +14,65 @@ function fmtDistance(meters: number): string {
   return `${miles.toFixed(1)} mi`
 }
 
-interface Props { result: RouteResult }
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor">
+      <circle cx="5" cy="4" r="1.3" /><circle cx="11" cy="4" r="1.3" />
+      <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+      <circle cx="5" cy="12" r="1.3" /><circle cx="11" cy="12" r="1.3" />
+    </svg>
+  )
+}
 
-export default function RouteResults({ result }: Props) {
+interface Props {
+  result: RouteResult
+  fixedEnd?: boolean
+  isManuallyOrdered?: boolean
+  onReorder?: (newOrderedStops: Stop[]) => void
+}
+
+export default function RouteResults({ result, fixedEnd = false, isManuallyOrdered = false, onReorder }: Props) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+
+  const { orderedStops } = result
+  const n = orderedStops.length
+
+  // Start is always locked. End is locked when fixedEnd.
+  const isLocked = (i: number) => i === 0 || (fixedEnd && i === n - 1)
+
+  const handleDragStart = (i: number) => { setDragIdx(i) }
+
+  const handleDragOver = (e: React.DragEvent, i: number) => {
+    e.preventDefault()
+    if (!isLocked(i)) setDragOverIdx(i)
+  }
+
+  const handleDrop = (e: React.DragEvent, i: number) => {
+    e.preventDefault()
+    if (dragIdx === null || dragIdx === i || isLocked(i)) {
+      setDragIdx(null); setDragOverIdx(null); return
+    }
+    const newStops = [...orderedStops]
+    const [moved] = newStops.splice(dragIdx, 1)
+    newStops.splice(i, 0, moved)
+    onReorder?.(newStops)
+    setDragIdx(null)
+    setDragOverIdx(null)
+  }
+
+  const handleDragEnd = () => { setDragIdx(null); setDragOverIdx(null) }
+
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">Route Summary</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">Route Summary</h2>
+        {isManuallyOrdered && (
+          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+            Manually ordered
+          </span>
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
@@ -34,18 +88,51 @@ export default function RouteResults({ result }: Props) {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-          Stop Order
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Stop Order
+          </h3>
+          {onReorder && (
+            <span className="text-xs text-slate-400">drag to reorder</span>
+          )}
+        </div>
         <ol className="space-y-1">
-          {result.orderedStops.map((stop, i) => (
-            <li key={stop.id} className="flex items-start gap-2 text-sm">
-              <span className="flex-shrink-0 w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mt-0.5">
-                {i + 1}
-              </span>
-              <span className="text-slate-700">{stop.address}</span>
-            </li>
-          ))}
+          {orderedStops.map((stop, i) => {
+            const locked = isLocked(i)
+            const isDragging = dragIdx === i
+            const isOver = dragOverIdx === i && dragIdx !== null && dragIdx !== i
+            return (
+              <li
+                key={stop.id}
+                draggable={!locked && !!onReorder}
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={e => handleDragOver(e, i)}
+                onDrop={e => handleDrop(e, i)}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center gap-2 text-sm rounded px-1 py-0.5 transition-colors ${
+                  isDragging ? 'opacity-40' : ''
+                } ${isOver ? 'bg-blue-50 ring-1 ring-blue-300' : ''} ${
+                  !locked && onReorder ? 'cursor-grab active:cursor-grabbing' : ''
+                }`}
+              >
+                {!locked && onReorder ? (
+                  <span className="flex-shrink-0 text-slate-300"><GripIcon /></span>
+                ) : (
+                  <span className="flex-shrink-0 w-4" />
+                )}
+                <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                  locked && i === 0
+                    ? 'bg-blue-500 text-white'
+                    : locked
+                    ? 'bg-green-500 text-white'
+                    : 'bg-blue-500 text-white'
+                }`}>
+                  {i + 1}
+                </span>
+                <span className="text-slate-700 flex-1 min-w-0 truncate">{stop.address}</span>
+              </li>
+            )
+          })}
         </ol>
       </div>
 
