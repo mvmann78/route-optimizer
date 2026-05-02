@@ -20,8 +20,6 @@ export default function RouteOptimizer({ apiKey }: Props) {
   const [isManuallyOrdered, setIsManuallyOrdered] = useState(false)
 
   const readyStops = stops.filter(s => s.geocoding === 'done' && s.coordinate)
-  const hasTimeWindows = stops.some(s => s.timeWindow)
-  const hasPins = readyStops.some(s => s.pinnedPosition != null)
 
   const handleOptimize = async () => {
     if (readyStops.length < 2) { setError('Add at least 2 geocoded addresses.'); return }
@@ -72,7 +70,7 @@ export default function RouteOptimizer({ apiKey }: Props) {
 
           <section>
             <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Stops</h2>
-            <StopList stops={stops} onChange={setStops} apiKey={apiKey} showTimeWindows fixedEnd={fixedEnd} />
+            <StopList stops={stops} onChange={setStops} apiKey={apiKey} fixedEnd={fixedEnd} />
             {readyStops.length > 0 && stops.length > readyStops.length && (
               <p className="text-xs text-amber-600 mt-2">
                 {stops.length - readyStops.length} stop(s) not yet geocoded and will be skipped.
@@ -104,16 +102,6 @@ export default function RouteOptimizer({ apiKey }: Props) {
             {mode === 'left-turns' && (
               <p className="text-xs text-slate-400 bg-slate-50 rounded p-2 mt-2">
                 Fetches up to 3 alternative routes and picks the one with fewest left turns.
-              </p>
-            )}
-            {mode === 'left-turns' && hasTimeWindows && (
-              <p className="text-xs text-amber-600 bg-amber-50 rounded p-2 mt-1">
-                ⚠ Time windows are ignored in left-turns mode.
-              </p>
-            )}
-            {hasPins && hasTimeWindows && (
-              <p className="text-xs text-amber-600 bg-amber-50 rounded p-2 mt-1">
-                ⚠ Pinned positions take priority — time windows will not be optimally honored.
               </p>
             )}
           </section>

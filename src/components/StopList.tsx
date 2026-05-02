@@ -7,7 +7,6 @@ interface Props {
   stops: Stop[]
   onChange: (stops: Stop[]) => void
   apiKey: string
-  showTimeWindows?: boolean
   fixedEnd?: boolean
 }
 
@@ -23,7 +22,7 @@ function PinIcon({ active }: { active: boolean }) {
   )
 }
 
-export default function StopList({ stops, onChange, apiKey, showTimeWindows = false, fixedEnd = false }: Props) {
+export default function StopList({ stops, onChange, apiKey, fixedEnd = false }: Props) {
   const [pinningId, setPinningId] = useState<string | null>(null)
   const [pinInput, setPinInput] = useState('')
 
@@ -56,12 +55,6 @@ export default function StopList({ stops, onChange, apiKey, showTimeWindows = fa
 
   const handleSelect = (stop: Stop, label: string, coord: Coordinate) => {
     update(stop.id, { address: label, coordinate: coord, geocoding: 'done' })
-  }
-
-  const toggleTimeWindow = (stop: Stop) => {
-    update(stop.id, {
-      timeWindow: stop.timeWindow ? undefined : { earliest: '08:00', latest: '17:00' },
-    })
   }
 
   // Compute the valid pin range based on how many stops there are
@@ -147,20 +140,6 @@ export default function StopList({ stops, onChange, apiKey, showTimeWindows = fa
                   {stop.geocoding === 'error' && <span className="text-red-400" title="Address not found">✗</span>}
                 </span>
 
-                {showTimeWindows && (
-                  <button
-                    onClick={() => toggleTimeWindow(stop)}
-                    title="Toggle arrival time window"
-                    className={`text-sm px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${
-                      stop.timeWindow
-                        ? 'border-blue-400 text-blue-500 bg-blue-50'
-                        : 'border-slate-200 text-slate-400 hover:border-slate-300'
-                    }`}
-                  >
-                    ⏰
-                  </button>
-                )}
-
                 {/* Pin button for middle stops */}
                 {isPinnable && !isPinning && (
                   <button
@@ -218,24 +197,6 @@ export default function StopList({ stops, onChange, apiKey, showTimeWindows = fa
                 </div>
               )}
 
-              {showTimeWindows && stop.timeWindow && (
-                <div className="mt-2 ml-14 flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Arrive between</span>
-                  <input
-                    type="time"
-                    value={stop.timeWindow.earliest}
-                    onChange={e => update(stop.id, { timeWindow: { ...stop.timeWindow!, earliest: e.target.value } })}
-                    className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-blue-400"
-                  />
-                  <span className="text-xs text-slate-500">and</span>
-                  <input
-                    type="time"
-                    value={stop.timeWindow.latest}
-                    onChange={e => update(stop.id, { timeWindow: { ...stop.timeWindow!, latest: e.target.value } })}
-                    className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-blue-400"
-                  />
-                </div>
-              )}
             </div>
           </Fragment>
         )

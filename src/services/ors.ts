@@ -156,88 +156,6 @@ export async function getRouteForOrder(
   }
 }
 
-async function optimizeWithVroom(
-  stops: Stop[],
-  options: RouteOptions,
-  apiKey: string
-): Promise<RouteResult> {
-  const coords = stops.map(s => s.coordinate!)
-
-  const todayMidnight = new Date()
-  todayMidnight.setHours(0, 0, 0, 0)
-  const midnight = Math.floor(todayMidnight.getTime() / 1000)
-
-  // stop[0] is the vehicle start; stop[n-1] is the vehicle end when fixedEnd is set
-  const lastFixed = options.fixedEnd && !options.returnToStart
-  const jobStops = lastFixed ? stops.slice(1, -1) : stops.slice(1)
-
-  const jobs = jobStops.map((stop, i) => {
-    // id = original index in stops[] (jobStops[i] === stops[i+1] for non-lastFixed,
-    // and stops[i+1] for lastFixed as well — slice(1,-1) keeps the same 1-based indexing)
-    const job: Record<string, unknown> = { id: i + 1, location: toORS(stop.coordinate!) }
-    if (stop.timeWindow) {
-      const [eh, em] = stop.timeWindow.earliest.split(':').map(Number)
-      const [lh, lm] = stop.timeWindow.latest.split(':').map(Number)
-      job.time_windows = [[midnight + eh * 3600 + em * 60, midnight + lh * 3600 + lm * 60]]
-    }
-    return job
-  })
-
-  const vehicle: Record<string, unknown> = {
-    id: 1,
-    profile: 'driving-car',
-    start: toORS(coords[0]),
-  }
-  if (options.returnToStart) vehicle.end = toORS(coords[0])
-  else if (lastFixed) vehicle.end = toORS(coords[coords.length - 1])
-
-  const res = await fetch(endpoint('optimization', apiKey), {
-    method: 'POST',
-    headers: postHeaders(apiKey),
-    body: JSON.stringify({ jobs, vehicles: [vehicle] }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: string }
-    throw new Error(err.error ?? `Optimization API failed (${res.status})`)
-  }
-
-  type VroomRoute = { steps: Array<{ type: string; id?: number }> }
-  const data = await res.json() as { routes?: VroomRoute[]; unassigned?: unknown[] }
-
-  if (!data.routes?.length) {
-    throw new Error('No route found — check that time windows are feasible')
-  }
-
-  const orderedIds = data.routes[0].steps
-    .filter(s => s.type === 'job')
-    .map(s => s.id!)
-
-  // Job ids are 1-indexed into stops[1..], so stops[id] maps directly
-  const orderedStops = [
-    stops[0],
-    ...orderedIds.map(id => stops[id]),
-    ...(lastFixed ? [stops[stops.length - 1]] : []),
-  ]
-  const orderedCoords = [
-    ...orderedStops.map(s => s.coordinate!),
-    ...(options.returnToStart ? [coords[0]] : []),
-  ]
-
-  const routes = await getDirections(orderedCoords, options, apiKey, false)
-  const route = routes[0]
-  const leftTurnCount = route.steps.filter(s => LEFT_TURN_TYPES.has(s.type)).length
-
-  return {
-    orderedStops,
-    steps: route.steps,
-    totalDistance: route.distance,
-    totalDuration: route.duration,
-    leftTurnCount,
-    geometry: route.geometry,
-  }
-}
-
 // Build pinnedSlots from stops for use with the constrained TSP.
 // Returns null and an error string if there are conflicting pins.
 function buildPinnedSlots(
@@ -269,7 +187,6 @@ export async function optimizeRoute(
   apiKey: string
 ): Promise<RouteResult> {
   const coords = stops.map(s => s.coordinate!)
-  const hasTimeWindows = stops.some(s => s.timeWindow)
   const hasPins = stops.some(s => s.pinnedPosition != null)
 
   // When pins are set, use constrained TSP (ignores Vroom/time-window optimization)
@@ -296,11 +213,6 @@ export async function optimizeRoute(
       leftTurnCount,
       geometry: route.geometry,
     }
-  }
-
-  // Delegate to Vroom when time windows are present (except left-turns mode)
-  if (hasTimeWindows && options.mode !== 'left-turns') {
-    return optimizeWithVroom(stops, options, apiKey)
   }
 
   // TSP-based optimization

@@ -8,10 +8,6 @@ export interface Stop {
   address: string
   coordinate?: Coordinate
   geocoding: 'idle' | 'loading' | 'done' | 'error'
-  timeWindow?: {
-    earliest: string // "HH:MM"
-    latest: string   // "HH:MM"
-  }
   pinnedPosition?: number // 1-indexed position in optimized route (1 = start); set by user
 }
 
